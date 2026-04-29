@@ -136,7 +136,31 @@ async def process_single_product(page, product_meta: dict, db, tmp_dir: str) -> 
             "original_filename": f"video_{i+1:02d}",
         })
 
-    # 5. Drive 업로드 (실패 시 URL만 DB에 저장하고 계속 진행)
+    # 5. AI 분석: 레이아웃 태깅 + 키워드 추출 (이미지가 로컬에 있는 동안 실행)
+    if os.getenv("GEMINI_API_KEY"):
+        try:
+            from ai.layout_tagger import process_product_tagging, extract_keywords_from_text
+
+            # 5-a. 상세 이미지로 레이아웃 섹션 분류
+            detail_paths = [a["local_path"] for a in assets_to_upload if a["asset_type"] == "detail_image"]
+            if detail_paths:
+                process_product_tagging(str(product.id), detail_paths, db)
+
+            # 5-b. 텍스트 기반 마케팅 키워드 추출
+            raw_hashtags = detail.get("keywords", [])
+            ai_keywords = extract_keywords_from_text(
+                product_name=detail.get("name", ""),
+                brand=detail.get("brand", ""),
+                description=detail.get("description_text", ""),
+                hashtags=raw_hashtags,
+            )
+            if ai_keywords:
+                crud.create_tags(db, product.id, ai_keywords)
+
+        except Exception as ai_err:
+            logger.warning(f"[AI] 분석 실패 (크롤링은 계속 진행): {ai_err}")
+
+    # 6. Drive 업로드 (실패 시 URL만 DB에 저장하고 계속 진행)
     if assets_to_upload:
         try:
             uploaded = upload_product_assets(
@@ -154,7 +178,6 @@ async def process_single_product(page, product_meta: dict, db, tmp_dir: str) -> 
                 })
         except Exception as drive_err:
             logger.warning(f"[Drive] 업로드 실패, 원본 URL만 저장: {drive_err}")
-            # Drive 실패 시 원본 이미지 URL을 직접 DB에 저장
             for i, url in enumerate(detail.get("thumbnail_urls", [])[:3]):
                 crud.create_asset(db, product.id, {
                     "asset_type": "thumbnail",

@@ -1,11 +1,8 @@
 name: 올리브영 주간 크롤링
 
 on:
-  schedule:
-    # 매주 금요일 18:00 KST = 09:00 UTC
-    - cron: '0 9 * * 5'
   workflow_dispatch:
-    # GitHub Actions 탭에서 수동으로도 실행 가능
+    # 대시보드 관리자 패널 또는 GitHub Actions 탭에서 수동 실행
 
 jobs:
   crawl:

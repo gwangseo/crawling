@@ -63,6 +63,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def _trigger_crawl():
+    """GitHub Actions workflow_dispatch API를 호출하여 크롤링 트리거"""
+    import urllib.request
+    import json as _json
+
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPO", "")  # 예: "username/crawling"
+
+    if not token or not repo:
+        st.error("GITHUB_TOKEN 또는 GITHUB_REPO 시크릿이 설정되지 않았습니다.")
+        return
+
+    url = f"https://api.github.com/repos/{repo}/actions/workflows/weekly_crawl.yml/dispatches"
+    payload = _json.dumps({"ref": "main"}).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            if resp.status == 204:
+                st.success("크롤링 시작됨! GitHub Actions에서 진행 상황을 확인하세요.")
+            else:
+                st.warning(f"응답 코드: {resp.status}")
+    except Exception as e:
+        st.error(f"크롤링 트리거 실패: {e}")
+
+
 def render_sidebar():
     with st.sidebar:
         st.markdown('<p class="main-title">닥터코리아</p>', unsafe_allow_html=True)
@@ -79,10 +114,16 @@ def render_sidebar():
         st.caption("데이터 출처: 올리브영")
         st.caption("수집 주기: 매주 금요일 18:00")
 
-        # 수동 크롤링 트리거 (관리자용)
-        with st.expander("관리자 기능"):
-            if st.button("지금 크롤링 실행", type="secondary"):
-                st.warning("이 기능은 scheduler.py --run-now 로 실행해주세요.")
+        # 관리자 전용 패널
+        with st.expander("🔒 관리자"):
+            pw = st.text_input("관리자 암호", type="password", key="admin_pw")
+            admin_password = os.environ.get("ADMIN_PASSWORD", "")
+            if pw and pw == admin_password:
+                st.success("인증됨")
+                if st.button("지금 크롤링 실행", type="primary", key="trigger_crawl"):
+                    _trigger_crawl()
+            elif pw:
+                st.error("암호가 틀렸습니다.")
 
     return mode
 
