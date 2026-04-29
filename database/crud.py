@@ -116,6 +116,23 @@ def search_products(
     return query.order_by(Product.created_at.desc()).offset(offset).limit(limit).all()
 
 
+def delete_product_ai_data(db: Session, product_id) -> None:
+    """AI 분석 데이터(레이아웃 + AI 태그)를 삭제하여 재분석 준비"""
+    import uuid as uuid_lib
+    pid = uuid_lib.UUID(str(product_id))
+    # 레이아웃 전체 삭제
+    db.query(ProductLayout).filter(ProductLayout.product_id == pid).delete()
+    # AI 생성 태그만 삭제 (무드:, 컬러:, 타겟: 접두사 + AI 키워드)
+    # 크롤러가 직접 추출한 해시태그(#)는 유지
+    from sqlalchemy import text
+    db.execute(
+        text("DELETE FROM tags WHERE product_id = :pid AND keyword NOT LIKE '#%%'"),
+        {"pid": str(pid)},
+    )
+    db.commit()
+    logger.info(f"[DB] AI 분석 데이터 초기화: {product_id}")
+
+
 def get_product_assets(db: Session, product_id, asset_type: Optional[str] = None) -> list[Asset]:
     """상품의 에셋 목록 조회 (asset_type 필터 선택적)"""
     import uuid as uuid_lib

@@ -1,0 +1,46 @@
+name: AI 재분석
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: '분석할 상품 수'
+        required: false
+        default: '20'
+      force:
+        description: '기존 분석 덮어씌우기 (true = 전체 재분석, false = 미분석 상품만)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  reanalyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: AI 재분석 실행
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ "${{ inputs.force }}" = "true" ]; then
+            python scripts/reanalyze_ai.py ${{ inputs.limit }} --force
+          else
+            python scripts/reanalyze_ai.py ${{ inputs.limit }}
+          fi

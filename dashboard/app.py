@@ -63,20 +63,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def _trigger_crawl():
-    """GitHub Actions workflow_dispatch API를 호출하여 크롤링 트리거"""
+def _dispatch_workflow(workflow_file: str, inputs: dict = None):
+    """GitHub Actions workflow_dispatch API 공통 호출"""
     import urllib.request
     import json as _json
 
     token = os.environ.get("GITHUB_TOKEN", "")
-    repo = os.environ.get("GITHUB_REPO", "")  # 예: "username/crawling"
+    repo = os.environ.get("GITHUB_REPO", "")
 
     if not token or not repo:
         st.error("GITHUB_TOKEN 또는 GITHUB_REPO 시크릿이 설정되지 않았습니다.")
-        return
+        return False
 
-    url = f"https://api.github.com/repos/{repo}/actions/workflows/weekly_crawl.yml/dispatches"
-    payload = _json.dumps({"ref": "main"}).encode()
+    url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
+    body = {"ref": "main"}
+    if inputs:
+        body["inputs"] = inputs
+
+    payload = _json.dumps(body).encode()
     req = urllib.request.Request(
         url,
         data=payload,
@@ -90,12 +94,22 @@ def _trigger_crawl():
     )
     try:
         with urllib.request.urlopen(req) as resp:
-            if resp.status == 204:
-                st.success("크롤링 시작됨! GitHub Actions에서 진행 상황을 확인하세요.")
-            else:
-                st.warning(f"응답 코드: {resp.status}")
+            return resp.status == 204
     except Exception as e:
-        st.error(f"크롤링 트리거 실패: {e}")
+        st.error(f"GitHub Actions 트리거 실패: {e}")
+        return False
+
+
+def _trigger_crawl():
+    if _dispatch_workflow("weekly_crawl.yml"):
+        st.success("크롤링 시작됨! GitHub Actions 탭에서 진행 상황을 확인하세요.")
+
+
+def _trigger_reanalyze(limit: int, force: bool):
+    inputs = {"limit": str(limit), "force": "true" if force else "false"}
+    if _dispatch_workflow("reanalyze_ai.yml", inputs):
+        mode = "전체 재분석" if force else "미분석 상품 분석"
+        st.success(f"AI {mode} 시작됨! 상품 {limit}개 처리 예정. GitHub Actions에서 진행 확인.")
 
 
 def render_sidebar():
@@ -120,8 +134,28 @@ def render_sidebar():
             admin_password = os.environ.get("ADMIN_PASSWORD", "")
             if pw and pw == admin_password:
                 st.success("인증됨")
+
+                st.markdown("**크롤링**")
                 if st.button("지금 크롤링 실행", type="primary", key="trigger_crawl"):
                     _trigger_crawl()
+
+                st.markdown("---")
+                st.markdown("**AI 분석**")
+
+                ai_limit = st.number_input(
+                    "분석할 상품 수", min_value=1, max_value=200,
+                    value=20, step=10, key="ai_limit"
+                )
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    if st.button("미분석 상품 AI 분석", key="reanalyze_new"):
+                        _trigger_reanalyze(int(ai_limit), force=False)
+                with col_b:
+                    if st.button("전체 AI 재분석 (덮어씌우기)", key="reanalyze_force",
+                                 type="secondary"):
+                        _trigger_reanalyze(int(ai_limit), force=True)
+
+                st.caption("미분석: 레이아웃 데이터 없는 상품만  |  전체: 기존 분석 결과 삭제 후 재실행")
             elif pw:
                 st.error("암호가 틀렸습니다.")
 
