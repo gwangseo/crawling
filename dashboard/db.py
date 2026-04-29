@@ -11,6 +11,24 @@ from sqlalchemy.orm import sessionmaker
 _engine = None
 _Session = None
 
+# SQLAlchemy가 PostgreSQL enum을 저장할 때 Python enum의 NAME(영문)을 사용함
+# UI에서 사용하는 한국어 값 → DB 저장 영문 이름 매핑
+CATEGORY_KO_TO_DB = {
+    "스킨케어": "skincare",
+    "마스크팩": "mask_pack",
+    "클렌징": "cleansing",
+    "선케어": "sun_care",
+    "메이크업": "makeup",
+    "네일": "nail",
+    "맨즈": "mens",
+    "헤어케어": "hair_care",
+    "바디케어": "body_care",
+    "기타": "etc",
+}
+
+# 반대 방향: DB 영문 이름 → UI 한국어 표시
+CATEGORY_DB_TO_KO = {v: k for k, v in CATEGORY_KO_TO_DB.items()}
+
 
 def _build_engine():
     url = os.getenv("DB_URL", "")
@@ -41,6 +59,11 @@ def _get_session():
     return _Session()
 
 
+def _to_korean_category(db_value: str) -> str:
+    """DB 영문 enum값 → 한국어 표시명"""
+    return CATEGORY_DB_TO_KO.get(db_value, db_value)
+
+
 # ─────────────────────────────────────────────
 # 상품 조회
 # ─────────────────────────────────────────────
@@ -52,22 +75,28 @@ def search_products(category=None, keyword=None, limit=50):
         conditions = ["1=1"]
         params = {"limit": limit}
         if category:
+            # UI 한국어 → DB 영문 변환 후 비교
+            db_category = CATEGORY_KO_TO_DB.get(category, category)
             conditions.append("p.category::text = :category")
-            params["category"] = category
+            params["category"] = db_category
         if keyword:
             conditions.append("(p.name ILIKE :kw OR p.brand ILIKE :kw)")
             params["kw"] = f"%{keyword}%"
 
         sql = text(f"""
-            SELECT id::text, brand, name, category::text, original_price,
-                   discount_price, product_url, created_at
+            SELECT id::text, brand, name, category::text AS category,
+                   original_price, discount_price, product_url, created_at
             FROM products p
             WHERE {' AND '.join(conditions)}
             ORDER BY created_at DESC
             LIMIT :limit
         """)
         rows = db.execute(sql, params).mappings().all()
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        # category 값을 한국어로 변환해서 반환
+        for r in result:
+            r["category"] = _to_korean_category(r.get("category", ""))
+        return result
     finally:
         db.close()
 
@@ -76,10 +105,12 @@ def get_product_detail(product_id: str):
     """단일 상품 레이아웃 + 태그 반환"""
     db = _get_session()
     try:
+        # :pid::uuid 대신 CAST(:pid AS uuid) 사용 (SQLAlchemy text() 파싱 충돌 방지)
         layout_sql = text("""
-            SELECT section_order, section_category, extracted_text, ai_description
+            SELECT section_order, section_category::text AS section_category,
+                   extracted_text, ai_description
             FROM product_layouts
-            WHERE product_id = :pid::uuid
+            WHERE product_id = CAST(:pid AS uuid)
             ORDER BY section_order
         """)
         layouts = [
@@ -87,7 +118,7 @@ def get_product_detail(product_id: str):
         ]
 
         tag_sql = text("""
-            SELECT keyword FROM tags WHERE product_id = :pid::uuid
+            SELECT keyword FROM tags WHERE product_id = CAST(:pid AS uuid)
         """)
         tags = [r["keyword"] for r in db.execute(tag_sql, {"pid": product_id}).mappings().all()]
 
@@ -107,13 +138,14 @@ def get_product_assets(product_id: str, asset_type=None):
         params = {"pid": product_id}
         type_filter = ""
         if asset_type:
-            type_filter = "AND asset_type = :asset_type"
+            type_filter = "AND asset_type::text = :asset_type"
             params["asset_type"] = asset_type
 
         sql = text(f"""
-            SELECT id::text, asset_type, drive_url, original_filename
+            SELECT id::text, asset_type::text AS asset_type,
+                   drive_url, original_filename
             FROM assets
-            WHERE product_id = :pid::uuid
+            WHERE product_id = CAST(:pid AS uuid)
               AND drive_url IS NOT NULL
               {type_filter}
             ORDER BY created_at
@@ -158,7 +190,10 @@ def get_top_liked_products(limit=10):
             LIMIT :limit
         """)
         rows = db.execute(sql, {"limit": limit}).mappings().all()
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        for r in result:
+            r["category"] = _to_korean_category(r.get("category", ""))
+        return result
     finally:
         db.close()
 
@@ -184,6 +219,9 @@ def get_category_summary():
             ORDER BY avg_likes DESC
         """)
         rows = db.execute(sql).mappings().all()
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        for r in result:
+            r["category"] = _to_korean_category(r.get("category", ""))
+        return result
     finally:
         db.close()
