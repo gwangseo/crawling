@@ -52,14 +52,14 @@ def search_products(category=None, keyword=None, limit=50):
         conditions = ["1=1"]
         params = {"limit": limit}
         if category:
-            conditions.append("p.category = :category")
+            conditions.append("p.category::text = :category")
             params["category"] = category
         if keyword:
             conditions.append("(p.name ILIKE :kw OR p.brand ILIKE :kw)")
             params["kw"] = f"%{keyword}%"
 
         sql = text(f"""
-            SELECT id::text, brand, name, category, original_price,
+            SELECT id::text, brand, name, category::text, original_price,
                    discount_price, product_url, created_at
             FROM products p
             WHERE {' AND '.join(conditions)}
@@ -144,7 +144,7 @@ def get_top_liked_products(limit=10):
                 p.id::text,
                 p.brand,
                 p.name,
-                p.category,
+                p.category::text AS category,
                 l.likes_count   AS current_likes,
                 COALESCE(pv.likes_count, 0) AS prev_likes,
                 (l.likes_count - COALESCE(pv.likes_count, 0)) AS likes_delta,
@@ -169,7 +169,7 @@ def get_category_summary():
     try:
         sql = text("""
             SELECT
-                p.category,
+                p.category::text AS category,
                 COUNT(DISTINCT p.id) AS product_count,
                 COALESCE(AVG(pm.likes_count), 0)::int   AS avg_likes,
                 COALESCE(AVG(pm.review_count), 0)::int  AS avg_reviews,
