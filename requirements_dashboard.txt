@@ -1,0 +1,17 @@
+# Streamlit Community Cloud 배포용
+# (torch, playwright, apscheduler 등 크롤러/AI 패키지 제외)
+
+# 대시보드
+streamlit==1.35.0
+plotly==5.22.0
+pandas>=2.2.2
+
+# DB 연결 (Supabase)
+sqlalchemy==2.0.30
+psycopg[binary,pool]>=3.1.0
+pgvector==0.3.2
+python-dotenv==1.0.1
+
+# 유틸리티
+loguru==0.7.2
+tenacity==8.3.0

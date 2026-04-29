@@ -1,0 +1,48 @@
+name: 올리브영 주간 크롤링
+
+on:
+  schedule:
+    # 매주 금요일 18:00 KST = 09:00 UTC
+    - cron: '0 9 * * 5'
+  workflow_dispatch:
+    # GitHub Actions 탭에서 수동으로도 실행 가능
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300  # 최대 5시간 (GitHub Actions 상한선 6시간)
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: Playwright 브라우저 설치
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Google Drive 인증 토큰 복원
+        run: |
+          mkdir -p credentials
+          echo "${{ secrets.GOOGLE_TOKEN_JSON_B64 }}" | base64 -d > credentials/token.json
+
+      - name: 크롤링 파이프라인 실행
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GOOGLE_APPLICATION_CREDENTIALS: ./credentials/kbeauty-crawler-0bfeb659929d.json
+          CRAWL_PRODUCTS_PER_CATEGORY: ${{ vars.CRAWL_PRODUCTS_PER_CATEGORY || '30' }}
+          CRAWL_SLEEP_MIN: '3.5'
+          CRAWL_SLEEP_MAX: '8.2'
+        run: python scheduler.py --run-now

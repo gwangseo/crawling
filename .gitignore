@@ -1,0 +1,35 @@
+# 환경 변수 및 시크릿 - 절대 커밋하지 말 것
+.env
+credentials/
+*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 임시 다운로드 파일
+tmp/
+temp/
+downloads/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 로그
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

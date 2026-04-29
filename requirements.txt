@@ -1,0 +1,45 @@
+# 크롤링
+playwright==1.44.0
+playwright-stealth==1.0.6
+beautifulsoup4==4.12.3
+requests==2.32.3
+
+# 백엔드
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+sqlalchemy==2.0.30
+psycopg[binary,pool]>=3.1.0
+pgvector==0.3.2
+alembic==1.13.1
+python-dotenv==1.0.1
+pydantic==2.7.1
+pydantic-settings==2.3.0
+
+# 스케줄러
+apscheduler==3.10.4
+
+# Google Drive
+google-api-python-client==2.131.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+
+# AI 파이프라인 (CLIP 임베딩 기능 사용 시에만 필요)
+# 아래 패키지는 크롤링 파이프라인에는 불필요 - 별도 설치:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#   pip install transformers==4.41.1
+google-generativeai==0.7.2
+Pillow>=10.4.0
+
+# 대시보드
+streamlit==1.35.0
+plotly==5.22.0
+pandas>=2.2.2
+
+# 모니터링
+slack-sdk==3.27.2
+
+# 유틸리티
+httpx==0.27.0
+aiofiles==23.2.1
+loguru==0.7.2
+tenacity==8.3.0
