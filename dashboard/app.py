@@ -63,66 +63,62 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def _github_headers():
+    return {
+        "Authorization": f"Bearer {os.environ.get('GITHUB_TOKEN', '')}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
 def _dispatch_workflow(workflow_file: str, inputs: dict = None):
-    """GitHub Actions workflow_dispatch API 공통 호출"""
-    import urllib.request
-    import urllib.error
-    import json as _json
+    """GitHub Actions workflow_dispatch API 공통 호출 (requests 라이브러리 사용)"""
+    import requests as _req
 
     token = os.environ.get("GITHUB_TOKEN", "")
-    repo = os.environ.get("GITHUB_REPO", "")  # 형식: "username/reponame"
+    repo = os.environ.get("GITHUB_REPO", "")
 
     if not token:
-        st.error("GITHUB_TOKEN 시크릿이 없습니다. Streamlit Secrets에 추가하세요.")
+        st.error("GITHUB_TOKEN 시크릿이 없습니다.")
         return False
     if not repo:
-        st.error("GITHUB_REPO 시크릿이 없습니다. 예시: `gwang/crawling`")
+        st.error("GITHUB_REPO 시크릿이 없습니다. 예: `gwangseo/crawling`")
         return False
 
-    # 브랜치명 자동 감지: main → master 순으로 시도
-    for branch in ("main", "master"):
-        body = {"ref": branch}
-        if inputs:
-            body["inputs"] = inputs
-
-        url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
-        payload = _json.dumps(body).encode()
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "Content-Type": "application/json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-            method="POST",
+    # 기본 브랜치 자동 감지
+    try:
+        repo_info = _req.get(
+            f"https://api.github.com/repos/{repo}",
+            headers=_github_headers(),
+            timeout=10,
         )
-        try:
-            with urllib.request.urlopen(req) as resp:
-                if resp.status == 204:
-                    return True
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                if branch == "master":
-                    # 두 브랜치 모두 실패
-                    body_text = e.read().decode("utf-8", errors="ignore")
-                    st.error(
-                        f"404 오류 — 아래를 확인하세요:\n\n"
-                        f"1. **GITHUB_REPO** 값: `{repo}` (형식: `username/reponame`)\n"
-                        f"2. **워크플로우 파일** `{workflow_file}`이 GitHub에 push 됐는지 확인\n"
-                        f"3. **Token 권한**: Settings → Developer settings → Fine-grained tokens → "
-                        f"Actions: Read & write 필요\n\n"
-                        f"GitHub 응답: {body_text[:200]}"
-                    )
-                continue  # main 실패 시 master 시도
-            else:
-                body_text = e.read().decode("utf-8", errors="ignore")
-                st.error(f"GitHub API 오류 {e.code}: {body_text[:300]}")
-                return False
-        except Exception as e:
-            st.error(f"네트워크 오류: {e}")
+        if repo_info.status_code == 404:
+            st.error(f"저장소를 찾을 수 없습니다: `{repo}`\nGITHUB_REPO 값을 확인하세요.")
             return False
+        default_branch = repo_info.json().get("default_branch", "main")
+    except Exception as e:
+        st.error(f"저장소 정보 조회 실패: {e}")
+        return False
+
+    body = {"ref": default_branch}
+    if inputs:
+        body["inputs"] = inputs
+
+    url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
+    resp = _req.post(url, json=body, headers=_github_headers(), timeout=15)
+
+    if resp.status_code == 204:
+        return True
+    elif resp.status_code == 404:
+        st.error(
+            f"워크플로우를 찾을 수 없습니다 (`{workflow_file}`).\n\n"
+            f"GitHub → 저장소 → Actions 탭에서 `{workflow_file}`이 보이는지 확인하세요.\n"
+            f"없다면 `git push`가 아직 안 된 것입니다."
+        )
+    elif resp.status_code == 422:
+        st.error(f"브랜치 `{default_branch}` 오류: {resp.json().get('message', '')}")
+    else:
+        st.error(f"GitHub API 오류 {resp.status_code}: {resp.text[:300]}")
 
     return False
 
