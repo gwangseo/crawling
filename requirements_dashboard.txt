@@ -6,10 +6,9 @@ streamlit==1.35.0
 plotly==5.22.0
 pandas>=2.2.2
 
-# DB 연결 (Supabase)
+# DB 연결 (Supabase) - psycopg2-binary: 클라우드 환경에서 가장 안정적
 sqlalchemy==2.0.30
-psycopg[binary,pool]>=3.1.0
-pgvector==0.3.2
+psycopg2-binary>=2.9.0
 python-dotenv==1.0.1
 
 # 유틸리티

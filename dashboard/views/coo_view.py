@@ -2,16 +2,11 @@
 Mode 3: 전략가(COO) 뷰
 - 주간 찜 수 / 리뷰 급상승 Top 10 트렌드 테이블
 - 카테고리별 요약 현황
-- 경쟁 브랜드 클러스터링
+- 경쟁 브랜드 검색
 """
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-
-
-def _get_db():
-    from database.session import SessionLocal
-    return SessionLocal()
 
 
 def render():
@@ -22,10 +17,8 @@ def render():
     st.caption("전주 대비 찜(좋아요) 증가량 기준 정렬 — 빠르게 바이럴되는 인디 브랜드 발굴에 활용하세요.")
 
     try:
-        from database import crud
-        db = _get_db()
-        trends = crud.get_top_liked_products(db, limit=10)
-        db.close()
+        from dashboard.db import get_top_liked_products
+        trends = get_top_liked_products(limit=10)
 
         if trends:
             df = pd.DataFrame(trends)
@@ -78,28 +71,8 @@ def render():
     # ===== 섹션 2: 카테고리별 현황 =====
     st.subheader("카테고리별 현황 요약")
     try:
-        from database import crud
-        db = _get_db()
-        from sqlalchemy import text
-        sql = text("""
-            SELECT
-                p.category,
-                COUNT(DISTINCT p.id) AS product_count,
-                COALESCE(AVG(pm.likes_count), 0)::int AS avg_likes,
-                COALESCE(AVG(pm.review_count), 0)::int AS avg_reviews,
-                COALESCE(AVG(pm.rating), 0)::numeric(3,1) AS avg_rating
-            FROM products p
-            LEFT JOIN (
-                SELECT DISTINCT ON (product_id) *
-                FROM product_metrics
-                ORDER BY product_id, captured_at DESC
-            ) pm ON p.id = pm.product_id
-            GROUP BY p.category
-            ORDER BY avg_likes DESC
-        """)
-        rows = db.execute(sql).mappings().all()
-        cat_data = [dict(r) for r in rows]
-        db.close()
+        from dashboard.db import get_category_summary
+        cat_data = get_category_summary()
 
         if cat_data:
             cat_df = pd.DataFrame(cat_data).rename(columns={
@@ -137,23 +110,11 @@ def render():
 
     if target_keyword:
         try:
-            from database import crud
-            db = _get_db()
-            search_results_objs = crud.search_products(db, keyword=target_keyword, limit=50)
-            search_results = [
-                {
-                    "brand": p.brand,
-                    "name": p.name,
-                    "category": p.category.value if p.category else None,
-                    "original_price": p.original_price,
-                    "discount_price": p.discount_price,
-                }
-                for p in search_results_objs
-            ]
-            db.close()
+            from dashboard.db import search_products
+            results = search_products(keyword=target_keyword, limit=50)
 
-            if search_results:
-                result_df = pd.DataFrame(search_results).rename(columns={
+            if results:
+                result_df = pd.DataFrame(results).rename(columns={
                     "brand": "브랜드",
                     "name": "상품명",
                     "category": "카테고리",
@@ -164,7 +125,7 @@ def render():
                     result_df[["브랜드", "상품명", "카테고리", "정가", "할인가"]],
                     use_container_width=True,
                 )
-                st.caption(f"'{target_keyword}' 관련 {len(search_results)}개 상품 발견")
+                st.caption(f"'{target_keyword}' 관련 {len(results)}개 상품 발견")
             else:
                 st.info(f"'{target_keyword}'에 해당하는 상품이 없습니다.")
         except Exception as e:

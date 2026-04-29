@@ -21,15 +21,9 @@ ASSET_TYPE_OPTIONS = {
 }
 
 
-def _get_db():
-    from database.session import SessionLocal
-    return SessionLocal()
-
-
 def render():
     st.header("디자이너 뷰 — 시각적 레퍼런스 탐색")
 
-    # --- 필터 컨트롤 ---
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         category = st.selectbox("카테고리", CATEGORY_OPTIONS, key="designer_category")
@@ -41,25 +35,18 @@ def render():
 
     st.divider()
 
-    # --- AI 유사 이미지 검색 (서버 배포 시 활성화) ---
     with st.expander("이미지로 유사 무드 검색 (AI 기능)", expanded=False):
         st.info(
             "이 기능은 CLIP 임베딩 백엔드 서버가 필요합니다. "
             "Docker로 백엔드를 실행한 뒤 로컬에서 사용하세요 (`docker-compose up`)."
         )
 
-    # --- 상품 목록 불러오기 ---
+    # --- 상품 목록 ---
     try:
-        from database import crud
-        db = _get_db()
+        from dashboard.db import search_products
         cat = category if category != "전체" else None
         kw = keyword if keyword else None
-        products_objs = crud.search_products(db, category=cat, keyword=kw, limit=50)
-        products = [
-            {"id": str(p.id), "brand": p.brand, "name": p.name}
-            for p in products_objs
-        ]
-        db.close()
+        products = search_products(category=cat, keyword=kw, limit=50)
     except Exception as e:
         st.error(f"데이터베이스 연결 실패: {e}")
         return
@@ -68,23 +55,20 @@ def render():
         st.info("검색 결과가 없습니다.")
         return
 
-    # --- 각 상품의 에셋 수집 및 갤러리 렌더링 ---
+    # --- 에셋 수집 및 갤러리 렌더링 ---
     all_assets = []
     try:
-        db = _get_db()
+        from dashboard.db import get_product_assets
         for product in products[:20]:
-            asset_objs = crud.get_product_assets(db, product["id"], asset_type=asset_type)
-            for a in asset_objs[:5]:
-                if not a.drive_url:
-                    continue
+            assets = get_product_assets(product["id"], asset_type=asset_type)
+            for a in assets[:5]:
                 all_assets.append({
-                    "id": str(a.id),
-                    "drive_url": a.drive_url,
-                    "asset_type": a.asset_type.value if a.asset_type else None,
+                    "id": a["id"],
+                    "drive_url": a["drive_url"],
+                    "asset_type": a["asset_type"],
                     "brand": product["brand"],
                     "product_name": product["name"],
                 })
-        db.close()
     except Exception as e:
         st.error(f"에셋 로드 실패: {e}")
         return

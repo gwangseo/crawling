@@ -23,11 +23,6 @@ CATEGORY_OPTIONS = [
 ]
 
 
-def _get_db():
-    from database.session import SessionLocal
-    return SessionLocal()
-
-
 def render():
     st.header("기획자(PM) 뷰 — 구조 분석 & 카피라이팅 인사이트")
 
@@ -38,22 +33,10 @@ def render():
 
     # --- 상품 목록 ---
     try:
-        from database import crud
-        db = _get_db()
+        from dashboard.db import search_products
         cat = selected_category if selected_category != "전체" else None
         kw = keyword if keyword else None
-        products_objs = crud.search_products(db, category=cat, keyword=kw, limit=30)
-        products = [
-            {
-                "id": str(p.id),
-                "brand": p.brand,
-                "name": p.name,
-                "category": p.category.value if p.category else None,
-                "product_url": p.product_url,
-            }
-            for p in products_objs
-        ]
-        db.close()
+        products = search_products(category=cat, keyword=kw, limit=30)
     except Exception as e:
         st.error(f"데이터베이스 연결 실패: {e}")
         return
@@ -65,7 +48,6 @@ def render():
     with col2:
         st.caption(f"{len(products)}개 상품 검색됨")
 
-    # 상품 선택 드롭다운
     product_options = {f"{p['brand']} - {p['name']}": p["id"] for p in products}
     selected_label = st.selectbox("분석할 상품 선택", list(product_options.keys()), key="pm_product_select")
 
@@ -74,32 +56,10 @@ def render():
 
     selected_id = product_options[selected_label]
 
-    # 상품 상세 조회
+    # --- 상품 상세 조회 ---
     try:
-        from database.models import Product
-        import uuid as uuid_lib
-        db = _get_db()
-        product_obj = db.query(Product).filter(
-            Product.id == uuid_lib.UUID(selected_id)
-        ).first()
-        if not product_obj:
-            st.warning("상품 정보를 찾을 수 없습니다.")
-            db.close()
-            return
-
-        detail = {
-            "tags": [t.keyword for t in product_obj.tags],
-            "layouts": [
-                {
-                    "order": l.section_order,
-                    "section": l.section_category.value if l.section_category else None,
-                    "text": l.extracted_text,
-                    "description": l.ai_description,
-                }
-                for l in sorted(product_obj.layouts, key=lambda x: x.section_order)
-            ],
-        }
-        db.close()
+        from dashboard.db import get_product_detail
+        detail = get_product_detail(selected_id)
     except Exception as e:
         st.error(f"상세 정보 로드 실패: {e}")
         return
@@ -112,7 +72,7 @@ def render():
         layouts = detail.get("layouts", [])
         if layouts:
             for section in layouts:
-                section_name = section.get("section", "Other")
+                section_name = section.get("section_category", "Other")
                 color = SECTION_COLORS.get(section_name, "#D3D3D3")
                 with st.container():
                     st.markdown(
@@ -123,13 +83,14 @@ def render():
                             margin-bottom:6px;
                             color:#333;
                             font-weight:bold;
-                        ">{section['order']}. {section_name}</div>""",
+                        ">{section['section_order']}. {section_name}</div>""",
                         unsafe_allow_html=True,
                     )
-                    if section.get("text"):
-                        st.caption(section["text"][:150] + "..." if len(section.get("text", "")) > 150 else section.get("text", ""))
-                    if section.get("description"):
-                        st.info(section["description"])
+                    text_val = section.get("extracted_text", "")
+                    if text_val:
+                        st.caption(text_val[:150] + "..." if len(text_val) > 150 else text_val)
+                    if section.get("ai_description"):
+                        st.info(section["ai_description"])
         else:
             st.info("구조 분석 데이터가 없습니다. AI 파이프라인 실행 후 확인하세요.")
 
@@ -155,7 +116,6 @@ def render():
         else:
             st.info("키워드 데이터가 없습니다.")
 
-        # 올리브영 원본 페이지 링크
         st.markdown("---")
         product_url = next((p["product_url"] for p in products if p["id"] == selected_id), None)
         if product_url:
