@@ -2,8 +2,24 @@
 Pinterest 스타일 Masonry 갤러리 컴포넌트
 st.columns를 활용한 타일 레이아웃
 """
+import re
 import streamlit as st
 from typing import Optional
+
+
+def _to_displayable_url(url: str) -> str:
+    """
+    Google Drive uc?export=view URL → thumbnail URL 변환
+    (uc?export=view는 2023년 이후 신뢰도 낮음, thumbnail 엔드포인트가 안정적)
+    """
+    if not url:
+        return url
+    # https://drive.google.com/uc?export=view&id=FILE_ID
+    match = re.search(r"[?&]id=([a-zA-Z0-9_-]+)", url)
+    if match and "drive.google.com" in url:
+        file_id = match.group(1)
+        return f"https://drive.google.com/thumbnail?id={file_id}&sz=w800"
+    return url
 
 
 def render_masonry_gallery(
@@ -23,7 +39,7 @@ def render_masonry_gallery(
     for i, asset in enumerate(assets):
         col = columns[i % cols]
         with col:
-            drive_url = asset.get("drive_url", "")
+            drive_url = _to_displayable_url(asset.get("drive_url", ""))
             if not drive_url:
                 continue
 

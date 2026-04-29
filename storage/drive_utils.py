@@ -114,7 +114,7 @@ def upload_file_to_drive(service, local_path: str, folder_id: str, filename: str
         body={"type": "anyone", "role": "reader"},
     ).execute()
 
-    drive_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+    drive_url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w800"
     web_view_link = uploaded.get("webViewLink", "")
 
     logger.info(f"[Drive] 업로드 완료: {filename} → {drive_url}")

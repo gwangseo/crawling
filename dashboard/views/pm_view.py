@@ -92,7 +92,11 @@ def render():
                     if section.get("ai_description"):
                         st.info(section["ai_description"])
         else:
-            st.info("구조 분석 데이터가 없습니다. AI 파이프라인 실행 후 확인하세요.")
+            st.info(
+                "구조 분석 데이터가 없습니다.\n\n"
+                "상세 페이지 레이아웃 분석은 AI 파이프라인(`ai/layout_tagger.py`)이 "
+                "별도로 실행되어야 생성됩니다. 현재 크롤링 파이프라인에는 미통합 상태입니다."
+            )
 
     # --- 소구점 키워드 차트 ---
     with col_right:
@@ -114,7 +118,7 @@ def render():
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("키워드 데이터가 없습니다.")
+            st.info("이 상품에는 수집된 키워드가 없습니다.")
 
         st.markdown("---")
         product_url = next((p["product_url"] for p in products if p["id"] == selected_id), None)
