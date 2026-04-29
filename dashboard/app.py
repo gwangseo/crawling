@@ -66,38 +66,65 @@ st.markdown("""
 def _dispatch_workflow(workflow_file: str, inputs: dict = None):
     """GitHub Actions workflow_dispatch API 공통 호출"""
     import urllib.request
+    import urllib.error
     import json as _json
 
     token = os.environ.get("GITHUB_TOKEN", "")
-    repo = os.environ.get("GITHUB_REPO", "")
+    repo = os.environ.get("GITHUB_REPO", "")  # 형식: "username/reponame"
 
-    if not token or not repo:
-        st.error("GITHUB_TOKEN 또는 GITHUB_REPO 시크릿이 설정되지 않았습니다.")
+    if not token:
+        st.error("GITHUB_TOKEN 시크릿이 없습니다. Streamlit Secrets에 추가하세요.")
+        return False
+    if not repo:
+        st.error("GITHUB_REPO 시크릿이 없습니다. 예시: `gwang/crawling`")
         return False
 
-    url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
-    body = {"ref": "main"}
-    if inputs:
-        body["inputs"] = inputs
+    # 브랜치명 자동 감지: main → master 순으로 시도
+    for branch in ("main", "master"):
+        body = {"ref": branch}
+        if inputs:
+            body["inputs"] = inputs
 
-    payload = _json.dumps(body).encode()
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status == 204
-    except Exception as e:
-        st.error(f"GitHub Actions 트리거 실패: {e}")
-        return False
+        url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
+        payload = _json.dumps(body).encode()
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                if resp.status == 204:
+                    return True
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                if branch == "master":
+                    # 두 브랜치 모두 실패
+                    body_text = e.read().decode("utf-8", errors="ignore")
+                    st.error(
+                        f"404 오류 — 아래를 확인하세요:\n\n"
+                        f"1. **GITHUB_REPO** 값: `{repo}` (형식: `username/reponame`)\n"
+                        f"2. **워크플로우 파일** `{workflow_file}`이 GitHub에 push 됐는지 확인\n"
+                        f"3. **Token 권한**: Settings → Developer settings → Fine-grained tokens → "
+                        f"Actions: Read & write 필요\n\n"
+                        f"GitHub 응답: {body_text[:200]}"
+                    )
+                continue  # main 실패 시 master 시도
+            else:
+                body_text = e.read().decode("utf-8", errors="ignore")
+                st.error(f"GitHub API 오류 {e.code}: {body_text[:300]}")
+                return False
+        except Exception as e:
+            st.error(f"네트워크 오류: {e}")
+            return False
+
+    return False
 
 
 def _trigger_crawl():
