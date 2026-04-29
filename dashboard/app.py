@@ -6,6 +6,15 @@ Streamlit 대시보드 진입점
 - Mode 3: 전략가(COO) 뷰
 """
 import os
+import sys
+
+# Streamlit Cloud는 dashboard/app.py가 있는 폴더를 기준으로 실행하기 때문에
+# 프로젝트 루트(/mount/src/crawling/)를 sys.path에 수동으로 추가해야
+# `from dashboard.xxx import ...` 같은 절대 임포트가 동작한다.
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
 import streamlit as st
 from dotenv import load_dotenv
 
